@@ -145,8 +145,11 @@ install_base_packages() {
         coreutils \
         util-linux \
         iproute2 \
-        locales
-    log_success "Pacotes base instalados."
+        locales \
+        python3 \
+        python3-venv \
+        python3-pip
+    log_success "Pacotes base (incluindo Python 3 e venv) instalados."
 }
 
 # ------------------------------------------------------------------------------
@@ -267,11 +270,48 @@ EOF
 }
 
 # ------------------------------------------------------------------------------
+# 6. Configuração do ambiente Python e CLI
+# ------------------------------------------------------------------------------
+setup_python_environment() {
+    log_step "7. Configurando ambiente virtual Python e CLI do sistema"
+    REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    VENV_DIR="${STEAM_HOME}/venv"
+
+    if [ ! -d "${VENV_DIR}" ]; then
+        log_info "Criando ambiente virtual em ${VENV_DIR}..."
+        runuser -u "${STEAM_USER}" -- python3 -m venv "${VENV_DIR}"
+    fi
+
+    if [ -f "${REPO_DIR}/server/requirements.txt" ]; then
+        log_info "Instalando dependências do backend..."
+        runuser -u "${STEAM_USER}" -- "${VENV_DIR}/bin/pip" install --quiet --upgrade pip
+        runuser -u "${STEAM_USER}" -- "${VENV_DIR}/bin/pip" install --quiet -r "${REPO_DIR}/server/requirements.txt"
+        log_success "Dependências instaladas no ambiente virtual."
+    fi
+
+    # Wrapper global /usr/local/bin/gsi
+    cat << EOF > /usr/local/bin/gsi
+#!/usr/bin/env bash
+export PYTHONPATH="${REPO_DIR}"
+export STEAM_HOME="${STEAM_HOME}"
+if [ "\$(id -u)" -eq "\$(id -u ${STEAM_USER} 2>/dev/null || echo -1)" ]; then
+    exec "${VENV_DIR}/bin/python" -m server.app.cli "\$@"
+elif [ "\$(id -u)" -eq 0 ]; then
+    exec runuser -u "${STEAM_USER}" -- env PYTHONPATH="${REPO_DIR}" STEAM_HOME="${STEAM_HOME}" "${VENV_DIR}/bin/python" -m server.app.cli "\$@"
+else
+    exec sudo -u "${STEAM_USER}" PYTHONPATH="${REPO_DIR}" STEAM_HOME="${STEAM_HOME}" "${VENV_DIR}/bin/python" -m server.app.cli "\$@"
+fi
+EOF
+    chmod 755 /usr/local/bin/gsi
+    log_success "Comando global '/usr/local/bin/gsi' configurado."
+}
+
+# ------------------------------------------------------------------------------
 # Execução Principal
 # ------------------------------------------------------------------------------
 main() {
     echo -e "${BOLD}=====================================================${NC}"
-    echo -e "${BOLD}  Game Server Installer - Bootstrap do SteamCMD     ${NC}"
+    echo -e "${BOLD}  Game Server Installer - Bootstrap do Sistema       ${NC}"
     echo -e "${BOLD}=====================================================${NC}"
 
     check_prerequisites
@@ -279,14 +319,18 @@ main() {
     setup_32bit_architecture
     setup_steam_user
     install_steamcmd
+    setup_python_environment
 
     echo -e "\n${BOLD}${GREEN}=====================================================${NC}"
-    echo -e "${BOLD}${GREEN}  Marco 1 concluído com sucesso!                     ${NC}"
-    echo -e "${BOLD}${GREEN}  SteamCMD instalado e validado para uso.             ${NC}"
+    echo -e "${BOLD}${GREEN}  Instalação concluída com sucesso!                  ${NC}"
+    echo -e "${BOLD}${GREEN}  SteamCMD e CLI 'gsi' prontos para uso.             ${NC}"
     echo -e "${BOLD}${GREEN}=====================================================${NC}"
     echo -e "Usuário de serviço: ${STEAM_USER}"
     echo -e "Diretório SteamCMD: ${STEAMCMD_DIR}"
-    echo -e "Comando rápido:     su - ${STEAM_USER} -c 'steamcmd +quit'\n"
+    echo -e "Ambiente Python:    ${STEAM_HOME}/venv"
+    echo -e "Comandos disponíveis:"
+    echo -e "  - steamcmd:  executa o cliente SteamCMD oficial"
+    echo -e "  - gsi:       gerenciador de servidores e perfis (ex: gsi validate-profile 7dtd)\n"
 }
 
 main "$@"

@@ -1,0 +1,213 @@
+# ==============================================================================
+# Game Server Profile: 7 Days to Die Dedicated Server
+# Documentação de Referência:
+#   - SteamDB / App ID: 294420 (https://steamdb.info/app/294420/)
+#   - Valve Developer Community (7 Days to Die Dedicated Server)
+#   - Official 7DtD Server Configuration (serverconfig.xml)
+# ==============================================================================
+
+id: "7dtd"
+name: "7 Days to Die"
+steam_app_id: 294420
+anonymous_login: true
+install_dir_name: "7dtd"
+executable: "startserver.sh"
+start_arguments:
+  - "-configfile=serverconfig.xml"
+
+system_dependencies:
+  - "libc6:i386"
+  - "libstdc++6:i386"
+  - "lib32gcc-s1"
+
+ports:
+  - port: 26900
+    protocol: "TCP/UDP"
+    description: "Porta primária do jogo (conexão e controle)"
+  - port: 26901
+    protocol: "UDP"
+    description: "Steam query e tráfego RakNet"
+  - port: 26902
+    protocol: "UDP"
+    description: "Steam query e tráfego RakNet"
+  - port: 26903
+    protocol: "UDP"
+    description: "Steam query e tráfego RakNet"
+  - port: 8080
+    protocol: "TCP"
+    optional: true
+    description: "Painel web embutido do jogo (se ControlPanelEnabled for true)"
+  - port: 8081
+    protocol: "TCP"
+    optional: true
+    description: "Porta do console Telnet (se TelnetEnabled for true)"
+
+config_file:
+  filename: "serverconfig.xml"
+  format: "xml_properties"
+
+fields:
+  - key: "ServerName"
+    label: "Nome do Servidor"
+    type: "string"
+    default: "My 7 Days to Die Dedicated Server"
+    required: true
+    min_length: 3
+    max_length: 64
+    description: "Nome exibido na lista pública de servidores"
+
+  - key: "ServerDescription"
+    label: "Descrição do Servidor"
+    type: "string"
+    default: "Servidor dedicado de 7 Days to Die configurado via Game Server Installer"
+    required: false
+    max_length: 255
+    description: "Descrição visível para os jogadores nos detalhes do servidor"
+
+  - key: "ServerPassword"
+    label: "Senha do Servidor"
+    type: "password"
+    default: ""
+    required: false
+    description: "Senha de acesso exigida aos jogadores (deixe vazio para livre acesso)"
+
+  - key: "ServerPort"
+    label: "Porta do Servidor"
+    type: "integer"
+    default: 26900
+    required: true
+    min: 1024
+    max: 65535
+    description: "Porta de rede principal utilizada pelo servidor"
+
+  - key: "ServerVisibility"
+    label: "Visibilidade do Servidor"
+    type: "select"
+    default: "2"
+    options:
+      - label: "Público (visível a todos)"
+        value: "2"
+      - label: "Apenas Amigos"
+        value: "1"
+      - label: "Não listado / Privado"
+        value: "0"
+    description: "Define a visibilidade no navegador de servidores da Steam"
+
+  - key: "ServerMaxPlayerCount"
+    label: "Máximo de Jogadores"
+    type: "integer"
+    default: 8
+    required: true
+    min: 1
+    max: 64
+    description: "Número máximo de jogadores simultâneos conectados"
+
+  - key: "GameWorld"
+    label: "Mundo / Mapa"
+    type: "select"
+    default: "Navezgane"
+    options:
+      - label: "Navezgane (Mapa oficial tradicional)"
+        value: "Navezgane"
+      - label: "Pré-gerado 1 (PREGEN01)"
+        value: "PREGEN01"
+      - label: "Pré-gerado 2 (PREGEN02)"
+        value: "PREGEN02"
+      - label: "Pré-gerado 3 (PREGEN03)"
+        value: "PREGEN03"
+    description: "Mundo utilizado no carregamento da partida"
+
+  - key: "GameName"
+    label: "Nome do Save"
+    type: "string"
+    default: "DedicatedWorld"
+    required: true
+    min_length: 1
+    max_length: 32
+    description: "Identificador da pasta de save do mundo no disco"
+
+  - key: "GameDifficulty"
+    label: "Dificuldade do Jogo"
+    type: "select"
+    default: "2"
+    options:
+      - label: "0 - Scavenger (Muito fácil)"
+        value: "0"
+      - label: "1 - Adventurer (Fácil)"
+        value: "1"
+      - label: "2 - Nomad (Padrão)"
+        value: "2"
+      - label: "3 - Warrior (Difícil)"
+        value: "3"
+      - label: "4 - Survivalist (Muito difícil)"
+        value: "4"
+      - label: "5 - Insane (Extremo)"
+        value: "5"
+    description: "Nível de dificuldade dos inimigos e sobrevivência"
+
+  - key: "DayLightLength"
+    label: "Horas de Luz do Dia"
+    type: "integer"
+    default: 18
+    min: 12
+    max: 22
+    description: "Duração das horas de luz durante as 24 horas do jogo"
+
+  - key: "DayNightLength"
+    label: "Duração do Ciclo Diário (Minutos reais)"
+    type: "integer"
+    default: 60
+    min: 10
+    max: 240
+    description: "Tempo em minutos reais para que 24 horas passem no jogo"
+
+  - key: "DropOnDeath"
+    label: "Itens Perdidos ao Morrer"
+    type: "select"
+    default: "1"
+    options:
+      - label: "0 - Nada"
+        value: "0"
+      - label: "1 - Tudo"
+        value: "1"
+      - label: "2 - Apenas Ferramentas"
+        value: "2"
+      - label: "3 - Apenas Mochila"
+        value: "3"
+      - label: "4 - Deletar Tudo"
+        value: "4"
+    description: "Penalidade aplicada ao inventário do jogador em caso de morte"
+
+  - key: "EACEnabled"
+    label: "Easy Anti-Cheat (EAC)"
+    type: "boolean"
+    default: true
+    description: "Habilita a proteção Easy Anti-Cheat"
+
+  - key: "TelnetEnabled"
+    label: "Habilitar Telnet"
+    type: "boolean"
+    default: false
+    description: "Habilita acesso via console remoto Telnet"
+
+  - key: "TelnetPort"
+    label: "Porta Telnet"
+    type: "integer"
+    default: 8081
+    min: 1024
+    max: 65535
+    description: "Porta utilizada pelo console Telnet"
+
+  - key: "ControlPanelEnabled"
+    label: "Habilitar Painel Web Nativo"
+    type: "boolean"
+    default: false
+    description: "Habilita a interface web interna do 7 Days to Die"
+
+  - key: "ControlPanelPort"
+    label: "Porta do Painel Web Nativo"
+    type: "integer"
+    default: 8080
+    min: 1024
+    max: 65535
+    description: "Porta utilizada pelo painel web do próprio jogo"
