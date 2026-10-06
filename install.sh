@@ -225,10 +225,18 @@ install_steamcmd() {
         log_info "SteamCMD já encontrado em ${STEAMCMD_DIR}."
     fi
 
-    # Link simbólico seguro em /usr/local/bin para facilitar invocação
+    # Link/wrapper em /usr/local/bin para facilitar invocação transparente
     cat << 'EOF' > /usr/local/bin/steamcmd
 #!/usr/bin/env bash
-exec su - steam -c "/home/steam/steamcmd/steamcmd.sh \"$@\""
+STEAM_UID=$(id -u steam 2>/dev/null || echo "")
+CURRENT_UID=$(id -u)
+if [ -n "${STEAM_UID}" ] && [ "${CURRENT_UID}" -eq "${STEAM_UID}" ]; then
+    exec /home/steam/steamcmd/steamcmd.sh "$@"
+elif [ "${CURRENT_UID}" -eq 0 ]; then
+    exec runuser -u steam -- /home/steam/steamcmd/steamcmd.sh "$@"
+else
+    exec sudo -u steam /home/steam/steamcmd/steamcmd.sh "$@"
+fi
 EOF
     chmod 755 /usr/local/bin/steamcmd
     log_success "Comando global '/usr/local/bin/steamcmd' configurado."
@@ -240,7 +248,7 @@ EOF
     log_info "Executando 'steamcmd.sh +quit' como usuário '${STEAM_USER}'..."
 
     # Executa como usuário steam sem privilégios
-    su - "${STEAM_USER}" -c "${STEAMCMD_DIR}/steamcmd.sh +quit" > /tmp/steamcmd_first_run.log 2>&1 || {
+    runuser -u "${STEAM_USER}" -- "${STEAMCMD_DIR}/steamcmd.sh" +quit > /tmp/steamcmd_first_run.log 2>&1 || {
         log_error "Falha ao executar o SteamCMD. Saída do log:"
         cat /tmp/steamcmd_first_run.log >&2
         abort "A verificação final do SteamCMD falhou."
