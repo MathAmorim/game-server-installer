@@ -275,31 +275,39 @@ EOF
 setup_python_environment() {
     log_step "7. Configurando ambiente virtual Python e CLI do sistema"
     REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    APP_DIR="/opt/game-server-installer"
     VENV_DIR="${STEAM_HOME}/venv"
+
+    # Instalar/sincronizar código da aplicação em /opt/game-server-installer
+    log_info "Instalando aplicação em ${APP_DIR}..."
+    mkdir -p "${APP_DIR}"
+    cp -r "${REPO_DIR}/server" "${APP_DIR}/"
+    cp -r "${REPO_DIR}/profiles" "${APP_DIR}/"
+    chmod -R a+rX "${APP_DIR}"
 
     if [ ! -d "${VENV_DIR}" ]; then
         log_info "Criando ambiente virtual em ${VENV_DIR}..."
         runuser -u "${STEAM_USER}" -- python3 -m venv "${VENV_DIR}"
     fi
 
-    if [ -f "${REPO_DIR}/server/requirements.txt" ]; then
+    if [ -f "${APP_DIR}/server/requirements.txt" ]; then
         log_info "Instalando dependências do backend..."
         runuser -u "${STEAM_USER}" -- "${VENV_DIR}/bin/pip" install --quiet --upgrade pip
-        runuser -u "${STEAM_USER}" -- "${VENV_DIR}/bin/pip" install --quiet -r "${REPO_DIR}/server/requirements.txt"
+        runuser -u "${STEAM_USER}" -- "${VENV_DIR}/bin/pip" install --quiet -r "${APP_DIR}/server/requirements.txt"
         log_success "Dependências instaladas no ambiente virtual."
     fi
 
     # Wrapper global /usr/local/bin/gsi
     cat << EOF > /usr/local/bin/gsi
 #!/usr/bin/env bash
-export PYTHONPATH="${REPO_DIR}"
+export PYTHONPATH="${APP_DIR}"
 export STEAM_HOME="${STEAM_HOME}"
 if [ "\$(id -u)" -eq "\$(id -u ${STEAM_USER} 2>/dev/null || echo -1)" ]; then
     exec "${VENV_DIR}/bin/python" -m server.app.cli "\$@"
 elif [ "\$(id -u)" -eq 0 ]; then
-    exec runuser -u "${STEAM_USER}" -- env PYTHONPATH="${REPO_DIR}" STEAM_HOME="${STEAM_HOME}" "${VENV_DIR}/bin/python" -m server.app.cli "\$@"
+    exec runuser -u "${STEAM_USER}" -- env PYTHONPATH="${APP_DIR}" STEAM_HOME="${STEAM_HOME}" "${VENV_DIR}/bin/python" -m server.app.cli "\$@"
 else
-    exec sudo -u "${STEAM_USER}" PYTHONPATH="${REPO_DIR}" STEAM_HOME="${STEAM_HOME}" "${VENV_DIR}/bin/python" -m server.app.cli "\$@"
+    exec sudo -u "${STEAM_USER}" PYTHONPATH="${APP_DIR}" STEAM_HOME="${STEAM_HOME}" "${VENV_DIR}/bin/python" -m server.app.cli "\$@"
 fi
 EOF
     chmod 755 /usr/local/bin/gsi
