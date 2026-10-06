@@ -315,6 +315,26 @@ EOF
 }
 
 # ------------------------------------------------------------------------------
+# 7. Configuração e Inicialização do Serviço systemd
+# ------------------------------------------------------------------------------
+setup_systemd_service() {
+    log_step "8. Registrando e iniciando serviço systemd do painel"
+    REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    SERVICE_SRC="${REPO_DIR}/systemd/gsi-daemon.service"
+    SERVICE_DST="/etc/systemd/system/gsi-daemon.service"
+
+    if [ -f "${SERVICE_SRC}" ]; then
+        cp "${SERVICE_SRC}" "${SERVICE_DST}"
+        systemctl daemon-reload
+        systemctl enable gsi-daemon.service
+        systemctl restart gsi-daemon.service
+        log_success "Serviço 'gsi-daemon.service' registrado e iniciado."
+    else
+        log_warn "Arquivo ${SERVICE_SRC} não encontrado. O serviço não foi registrado."
+    fi
+}
+
+# ------------------------------------------------------------------------------
 # Execução Principal
 # ------------------------------------------------------------------------------
 main() {
@@ -328,14 +348,21 @@ main() {
     setup_steam_user
     install_steamcmd
     setup_python_environment
+    setup_systemd_service
+
+    # Obter IP local da máquina
+    HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
 
     echo -e "\n${BOLD}${GREEN}=====================================================${NC}"
     echo -e "${BOLD}${GREEN}  Instalação concluída com sucesso!                  ${NC}"
-    echo -e "${BOLD}${GREEN}  SteamCMD e CLI 'gsi' prontos para uso.             ${NC}"
+    echo -e "${BOLD}${GREEN}  SteamCMD e Painel Web prontos para uso.            ${NC}"
     echo -e "${BOLD}${GREEN}=====================================================${NC}"
     echo -e "Usuário de serviço: ${STEAM_USER}"
     echo -e "Diretório SteamCMD: ${STEAMCMD_DIR}"
     echo -e "Ambiente Python:    ${STEAM_HOME}/venv"
+    echo -e "Serviço systemd:    gsi-daemon.service (ativo)"
+    echo -e "Painel Web API:     http://${HOST_IP}:8000"
+    echo -e "Documentação API:   http://${HOST_IP}:8000/docs"
     echo -e "Comandos disponíveis:"
     echo -e "  - steamcmd:  executa o cliente SteamCMD oficial"
     echo -e "  - gsi:       gerenciador de servidores e perfis (ex: gsi validate-profile 7dtd)\n"

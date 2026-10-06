@@ -1,0 +1,19 @@
+[Unit]
+Description=Game Server Installer Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=steam
+Group=steam
+WorkingDirectory=/opt/game-server-installer
+Environment=PYTHONPATH=/opt/game-server-installer
+Environment=STEAM_HOME=/home/steam
+ExecStart=/home/steam/venv/bin/uvicorn server.app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
