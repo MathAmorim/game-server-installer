@@ -1,7 +1,7 @@
 """Rotas da API para criação, consulta e streaming de tarefas assíncronas."""
 
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Body, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -40,7 +40,7 @@ async def get_job_logs(job_id: str, request: Request) -> List[JobLogEntry]:
 
 
 @router.post("/install", response_model=Job, status_code=202)
-async def create_install_job(body: InstallJobRequest, request: Request) -> Job:
+async def create_install_job(request: Request, body: InstallJobRequest = Body(...)) -> Job:
     profile_manager = request.app.state.profile_manager
     job_manager = request.app.state.job_manager
 
