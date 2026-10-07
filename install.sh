@@ -103,10 +103,17 @@ check_prerequisites() {
     fi
     FREE_DISK_KB=$(df -Pk "${TARGET_PARTITION}" | awk 'NR==2 {print $4}')
     FREE_DISK_MB=$((FREE_DISK_KB / 1024))
-    if [ "${FREE_DISK_MB}" -lt "${MIN_DISK_MB}" ]; then
-        abort "Espaço em disco insuficiente em ${TARGET_PARTITION}: ${FREE_DISK_MB} MB disponíveis. Mínimo necessário: ${MIN_DISK_MB} MB."
+    
+    # Em reexecuções (idempotência), o espaço do SteamCMD e dos jogos já foi alocado
+    REQUIRED_DISK_MB="${MIN_DISK_MB}"
+    if [ -f "${STATE_FILE}" ]; then
+        REQUIRED_DISK_MB=2048  # 2 GB suficientes para atualizações do sistema e venv
     fi
-    log_success "Espaço em disco disponível em ${TARGET_PARTITION}: ${FREE_DISK_MB} MB."
+
+    if [ "${FREE_DISK_MB}" -lt "${REQUIRED_DISK_MB}" ]; then
+        abort "Espaço em disco insuficiente em ${TARGET_PARTITION}: ${FREE_DISK_MB} MB disponíveis. Mínimo necessário: ${REQUIRED_DISK_MB} MB."
+    fi
+    log_success "Espaço em disco disponível em ${TARGET_PARTITION}: ${FREE_DISK_MB} MB (necessário: ${REQUIRED_DISK_MB} MB)."
 
     # 1.6 Conectividade de rede e DNS
     log_info "Testando conectividade de rede com domínios essenciais..."
