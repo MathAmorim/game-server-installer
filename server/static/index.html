@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Server Installer | Painel de Controle</title>
+  <meta name="description" content="Painel de controle para instalação, configuração e gerenciamento de servidores dedicados de jogos via SteamCMD.">
+  
+  <!-- Modern Typography from Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="logo-area">
+      <div class="logo-icon">🎮</div>
+      <div class="logo-text">
+        <h1>Game Server Installer</h1>
+        <span>Painel de Servidores Dedicados</span>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="status-badge" id="api-status-badge">
+        <span class="pulse-dot"></span>
+        <span id="api-status-text">API Online</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main>
+    
+    <!-- Game Catalog Section -->
+    <section id="catalog-section">
+      <h2 class="section-title">📦 Catálogo de Servidores</h2>
+      <p class="section-subtitle">Escolha o jogo que deseja instalar e gerenciar na sua máquina:</p>
+      
+      <div class="catalog-grid" id="catalog-grid">
+        <!-- Cards de jogos gerados dinamicamente via JS -->
+      </div>
+    </section>
+
+    <!-- Selected Server Dashboard Section -->
+    <section id="dashboard-section" style="display: none;">
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <div>
+          <h2 class="section-title" id="selected-game-title">Carregando...</h2>
+          <span class="section-subtitle" id="selected-game-desc">Gerenciamento e configuração</span>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btn-back-to-catalog">← Voltar ao Catálogo</button>
+      </div>
+
+      <div class="dashboard-container">
+        
+        <!-- Left Column: Controls & Configuration Form -->
+        <div class="panel-card">
+          <div class="panel-card-header">
+            <span class="panel-title">⚙️ Painel de Operações</span>
+            <span class="tag" id="server-status-tag">Carregando...</span>
+          </div>
+
+          <!-- Status Metrics -->
+          <div class="metrics-row">
+            <div class="metric-box">
+              <div class="metric-label">Status</div>
+              <div class="metric-value" id="metric-status">-</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">PID</div>
+              <div class="metric-value" id="metric-pid">-</div>
+            </div>
+            <div class="metric-box">
+              <div class="metric-label">Portas Ativas</div>
+              <div class="metric-value" id="metric-ports">-</div>
+            </div>
+          </div>
+
+          <!-- Action Buttons Bar -->
+          <div class="control-bar">
+            <button class="btn btn-primary" id="btn-install-server">
+              📥 Instalar / Atualizar
+            </button>
+            <button class="btn btn-success" id="btn-start-server" disabled>
+              ▶️ Iniciar
+            </button>
+            <button class="btn btn-danger" id="btn-stop-server" disabled>
+              ⏹️ Parar
+            </button>
+            <button class="btn btn-secondary" id="btn-restart-server" disabled>
+              🔄 Reiniciar
+            </button>
+          </div>
+
+          <!-- Configuration Form Header & Button -->
+          <div class="panel-card-header" style="margin-top: 1rem;">
+            <span class="panel-title">📝 Parâmetros de Configuração</span>
+            <button class="btn btn-primary btn-sm" id="btn-save-config">💾 Salvar Configuração</button>
+          </div>
+
+          <!-- Dynamic Form Container -->
+          <form class="config-form" id="config-form" onsubmit="event.preventDefault();">
+            <div id="form-fields-container">
+              <!-- Campos gerados dinamicamente com base no perfil -->
+            </div>
+          </form>
+
+        </div>
+
+        <!-- Right Column: Live Terminal & Streaming Logs -->
+        <div class="terminal-card">
+          <div class="terminal-header">
+            <div class="terminal-title">
+              <span class="pulse-dot" style="color: var(--primary);" id="terminal-dot"></span>
+              <span id="terminal-header-title">Console de Execução & Logs ao Vivo</span>
+            </div>
+            <div class="terminal-controls">
+              <button class="btn btn-secondary btn-sm" id="btn-toggle-autoscroll">Auto-scroll: ON</button>
+              <button class="btn btn-secondary btn-sm" id="btn-copy-logs">Copiar</button>
+              <button class="btn btn-secondary btn-sm" id="btn-clear-logs">Limpar</button>
+            </div>
+          </div>
+
+          <div class="terminal-body" id="terminal-body">
+            <div class="log-line log-info">[SISTEMA] Selecione um jogo ou inicie uma operação para acompanhar os logs em tempo real.</div>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <p>Game Server Installer • Executando no Ubuntu 24.04 LTS via SteamCMD Oficial</p>
+  </footer>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>
