@@ -322,10 +322,61 @@ EOF
 }
 
 # ------------------------------------------------------------------------------
-# 7. Configuração e Inicialização do Serviço systemd
+# 7. Configuração de Credenciais de Acesso
+# ------------------------------------------------------------------------------
+setup_auth_credentials() {
+    log_step "7. Configurando credenciais de autenticação do painel"
+    mkdir -p "${STEAM_HOME}/.gsi"
+    chown -R "${STEAM_USER}:${STEAM_USER}" "${STEAM_HOME}/.gsi"
+    chmod 700 "${STEAM_HOME}/.gsi"
+
+    AUTH_FILE="${STEAM_HOME}/.gsi/auth.json"
+    if [ ! -f "${AUTH_FILE}" ]; then
+        # Gera senha segura inicial alfanumérica
+        INITIAL_PASS=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 14 || echo "gsiAdmin2026")
+        runuser -u "${STEAM_USER}" -- env PYTHONPATH="${APP_DIR}" STEAM_HOME="${STEAM_HOME}" \
+            "${VENV_DIR}/bin/python" -c "
+from server.app.core.auth import AuthManager
+mgr = AuthManager()
+mgr.set_password('admin', '${INITIAL_PASS}')
+"
+        ADMIN_PASSWORD="${INITIAL_PASS}"
+        log_success "Credenciais geradas: usuário 'admin'."
+    else
+        ADMIN_PASSWORD="[mantida existente]"
+        log_info "Arquivo de credenciais existente preservado em ${AUTH_FILE}."
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# 8. Verificação e Configuração de Firewall (UFW)
+# ------------------------------------------------------------------------------
+setup_firewall() {
+    log_step "8. Verificando configuração de firewall (UFW)"
+    if command -v ufw >/dev/null 2>&1 && ufw status | grep -qw "active"; then
+        log_info "Firewall UFW ativo detectado. Configurando regras necessárias..."
+        # Garante que a porta SSH continue aberta
+        ufw allow 22/tcp comment "SSH Server" >/dev/null 2>&1 || true
+        # Porta da interface web GSI
+        ufw allow 8000/tcp comment "GSI Web Panel" >/dev/null 2>&1 || true
+        # Portas do jogo (7 Days to Die)
+        ufw allow 26900/tcp comment "7 Days to Die TCP" >/dev/null 2>&1 || true
+        ufw allow 26900:26903/udp comment "7 Days to Die UDP" >/dev/null 2>&1 || true
+        log_success "Portas liberadas no UFW: 22/tcp, 8000/tcp, 26900/tcp, 26900-26903/udp."
+    else
+        log_info "Firewall UFW está inativo ou não instalado. Nenhuma regra de sistema foi alterada."
+        log_info "Portas recomendadas para encaminhamento no roteador/NAT:"
+        echo -e "      - 8000/tcp: Painel Web GSI"
+        echo -e "      - 26900/tcp: 7 Days to Die (conexão primária)"
+        echo -e "      - 26900-26903/udp: 7 Days to Die (query/RakNet)"
+    fi
+}
+
+# ------------------------------------------------------------------------------
+# 9. Configuração e Inicialização do Serviço systemd
 # ------------------------------------------------------------------------------
 setup_systemd_service() {
-    log_step "8. Registrando e iniciando serviço systemd do painel"
+    log_step "9. Registrando e iniciando serviço systemd do painel"
     REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     SERVICE_SRC="${REPO_DIR}/systemd/gsi-daemon.service"
     SERVICE_DST="/etc/systemd/system/gsi-daemon.service"
@@ -349,12 +400,16 @@ main() {
     echo -e "${BOLD}  Game Server Installer - Bootstrap do Sistema       ${NC}"
     echo -e "${BOLD}=====================================================${NC}"
 
+    ADMIN_PASSWORD=""
+
     check_prerequisites
     install_base_packages
     setup_32bit_architecture
     setup_steam_user
     install_steamcmd
     setup_python_environment
+    setup_auth_credentials
+    setup_firewall
     setup_systemd_service
 
     # Obter IP local da máquina
@@ -368,11 +423,14 @@ main() {
     echo -e "Diretório SteamCMD: ${STEAMCMD_DIR}"
     echo -e "Ambiente Python:    ${STEAM_HOME}/venv"
     echo -e "Serviço systemd:    gsi-daemon.service (ativo)"
-    echo -e "Painel Web API:     http://${HOST_IP}:8000"
-    echo -e "Documentação API:   http://${HOST_IP}:8000/docs"
-    echo -e "Comandos disponíveis:"
+    echo -e "Painel Web:         http://${HOST_IP}:8000"
+    echo -e "\n${BOLD}Credenciais de Acesso ao Painel:${NC}"
+    echo -e "  - Usuário: ${BOLD}admin${NC}"
+    echo -e "  - Senha:   ${BOLD}${ADMIN_PASSWORD}${NC}"
+    echo -e "  (Para alterar a senha: ${BLUE}sudo -u steam gsi passwd <nova_senha>${NC})"
+    echo -e "\nComandos disponíveis:"
     echo -e "  - steamcmd:  executa o cliente SteamCMD oficial"
-    echo -e "  - gsi:       gerenciador de servidores e perfis (ex: gsi validate-profile 7dtd)\n"
+    echo -e "  - gsi:       gerenciador CLI (ex: gsi validate-profile 7dtd, gsi passwd)\n"
 }
 
 main "$@"

@@ -2,7 +2,9 @@
 
 from pathlib import Path
 from typing import Any, Dict
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
+
+from server.app.core.security import api_limiter, get_current_user
 
 router = APIRouter(prefix="/api/servers", tags=["servers"])
 
@@ -22,7 +24,15 @@ async def get_server_status(profile_id: str, request: Request):
 
 
 @router.post("/{profile_id}/start")
-async def start_server(profile_id: str, request: Request):
+async def start_server(
+    profile_id: str,
+    request: Request,
+    current_user: str = Depends(get_current_user)
+):
+    client_ip = request.client.host if request.client else "unknown"
+    if not api_limiter.is_allowed(f"srv_action:{client_ip}", max_requests=30, window_seconds=60):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Muitas requisições.")
+
     profile = _get_profile_or_404(request, profile_id)
     server_mgr = request.app.state.server_manager
     result = server_mgr.start_server(profile)
@@ -32,7 +42,15 @@ async def start_server(profile_id: str, request: Request):
 
 
 @router.post("/{profile_id}/stop")
-async def stop_server(profile_id: str, request: Request):
+async def stop_server(
+    profile_id: str,
+    request: Request,
+    current_user: str = Depends(get_current_user)
+):
+    client_ip = request.client.host if request.client else "unknown"
+    if not api_limiter.is_allowed(f"srv_action:{client_ip}", max_requests=30, window_seconds=60):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Muitas requisições.")
+
     profile = _get_profile_or_404(request, profile_id)
     server_mgr = request.app.state.server_manager
     result = server_mgr.stop_server(profile)
@@ -42,7 +60,15 @@ async def stop_server(profile_id: str, request: Request):
 
 
 @router.post("/{profile_id}/restart")
-async def restart_server(profile_id: str, request: Request):
+async def restart_server(
+    profile_id: str,
+    request: Request,
+    current_user: str = Depends(get_current_user)
+):
+    client_ip = request.client.host if request.client else "unknown"
+    if not api_limiter.is_allowed(f"srv_action:{client_ip}", max_requests=30, window_seconds=60):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Muitas requisições.")
+
     profile = _get_profile_or_404(request, profile_id)
     server_mgr = request.app.state.server_manager
     return server_mgr.restart_server(profile)
@@ -71,7 +97,12 @@ async def get_server_config(profile_id: str, request: Request):
 
 
 @router.post("/{profile_id}/config")
-async def save_server_config(profile_id: str, request: Request, values: Dict[str, Any] = Body(...)):
+async def save_server_config(
+    profile_id: str,
+    request: Request,
+    values: Dict[str, Any] = Body(...),
+    current_user: str = Depends(get_current_user)
+):
     profile = _get_profile_or_404(request, profile_id)
     profile_mgr = request.app.state.profile_manager
     steam_home = request.app.state.job_manager.steam_home

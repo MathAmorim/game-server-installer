@@ -25,6 +25,10 @@
       </div>
     </div>
     <div class="header-status">
+      <div id="user-info-area" style="display: none; align-items: center; gap: 0.75rem;">
+        <span class="tag" id="user-badge" style="background: rgba(56, 189, 248, 0.15); color: var(--primary);">👤 admin</span>
+        <button class="btn btn-secondary btn-sm" id="btn-logout" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">Sair</button>
+      </div>
       <div class="status-badge" id="api-status-badge">
         <span class="pulse-dot"></span>
         <span id="api-status-text">API Online</span>
@@ -141,6 +145,35 @@
   <footer>
     <p>Game Server Installer • Executando no Ubuntu 24.04 LTS via SteamCMD Oficial</p>
   </footer>
+
+  <!-- Login Modal Overlay -->
+  <div class="modal-overlay" id="login-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-icon">🔒</div>
+        <h2 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.25rem;">Autenticação Necessária</h2>
+        <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;">Informe suas credenciais para gerenciar os servidores</p>
+      </div>
+      
+      <form id="login-form" onsubmit="event.preventDefault();">
+        <div class="modal-error" id="login-error-msg" style="display: none;"></div>
+        
+        <div class="form-group" style="margin-bottom: 1rem;">
+          <label for="login-username" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem;">Usuário</label>
+          <input type="text" id="login-username" class="form-control" value="admin" required autocomplete="username" style="width: 100%;">
+        </div>
+        
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label for="login-password" style="display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.4rem;">Senha</label>
+          <input type="password" id="login-password" class="form-control" placeholder="••••••••••••" required autocomplete="current-password" style="width: 100%;">
+        </div>
+        
+        <button type="submit" class="btn btn-primary" id="btn-submit-login" style="width: 100%;">
+          Entrar no Painel →
+        </button>
+      </form>
+    </div>
+  </div>
 
   <script type="module" src="/static/app.js"></script>
 </body>

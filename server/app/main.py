@@ -12,6 +12,9 @@ from fastapi.staticfiles import StaticFiles
 from server.app.api.profiles import router as profiles_router
 from server.app.api.jobs import router as jobs_router
 from server.app.api.servers import router as servers_router
+from server.app.api.auth import router as auth_router
+from server.app.core.auth import AuthManager
+from server.app.core.security import SecurityHeadersMiddleware
 from server.app.jobs.manager import JobManager
 from server.app.profiles.manager import ProfileManager
 from server.app.server_manager.manager import ServerProcessManager
@@ -21,6 +24,7 @@ from server.app.server_manager.manager import ServerProcessManager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     steam_home_env = os.environ.get("STEAM_HOME", "/home/steam")
     steam_path = Path(steam_home_env)
+    app.state.auth_manager = AuthManager(steam_home=steam_path)
     app.state.profile_manager = ProfileManager()
     app.state.job_manager = JobManager(steam_home=steam_path)
     app.state.server_manager = ServerProcessManager(steam_home=steam_path)
@@ -36,11 +40,13 @@ app = FastAPI(
 
 # Inicialização padrão do estado da aplicação
 _steam_home = Path(os.environ.get("STEAM_HOME", "/home/steam"))
+app.state.auth_manager = AuthManager(steam_home=_steam_home)
 app.state.profile_manager = ProfileManager()
 app.state.job_manager = JobManager(steam_home=_steam_home)
 app.state.server_manager = ServerProcessManager(steam_home=_steam_home)
 
-# Configuração de CORS
+# Middlewares de segurança
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -50,6 +56,7 @@ app.add_middleware(
 )
 
 # Registro de rotas da API
+app.include_router(auth_router)
 app.include_router(profiles_router)
 app.include_router(jobs_router)
 app.include_router(servers_router)

@@ -1,9 +1,14 @@
-"""Testes de integração para as rotas da API FastAPI."""
-
 from fastapi.testclient import TestClient
+from server.app.core.auth import create_token
 from server.app.main import app
 
 client = TestClient(app)
+
+
+def get_auth_headers():
+    auth_mgr = app.state.auth_manager
+    token = create_token("admin", auth_mgr.secret_key)
+    return {"Authorization": f"Bearer {token}"}
 
 
 def test_api_health():
@@ -43,8 +48,18 @@ def test_api_get_profile_not_found():
     assert response.status_code == 404
 
 
+def test_api_create_job_unauthorized():
+    # Sem header de autenticação deve retornar 401
+    response = client.post("/api/jobs/install", json={"profile_id": "7dtd"})
+    assert response.status_code == 401
+
+
 def test_api_create_job_invalid_profile():
-    response = client.post("/api/jobs/install", json={"profile_id": "invalid_game"})
+    response = client.post(
+        "/api/jobs/install",
+        json={"profile_id": "invalid_game"},
+        headers=get_auth_headers()
+    )
     assert response.status_code == 404
 
 
@@ -56,7 +71,8 @@ def test_api_create_job_invalid_custom_values():
             "custom_values": {
                 "ServerPort": 999999  # Porta fora do intervalo
             }
-        }
+        },
+        headers=get_auth_headers()
     )
     assert response.status_code == 400
     assert "Configuração inválida" in response.json()["detail"]
@@ -65,7 +81,8 @@ def test_api_create_job_invalid_custom_values():
 def test_api_create_and_get_job():
     response = client.post(
         "/api/jobs/install",
-        json={"profile_id": "7dtd"}
+        json={"profile_id": "7dtd"},
+        headers=get_auth_headers()
     )
     assert response.status_code == 202
     job_data = response.json()

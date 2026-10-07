@@ -10,6 +10,9 @@ const state = {
   eventSource: null,
   autoScroll: true,
   statusPollInterval: null,
+  authToken: sessionStorage.getItem("gsi_token") || null,
+  currentUser: sessionStorage.getItem("gsi_user") || null,
+  authEnabled: true,
 };
 
 // DOM Elements
@@ -41,7 +44,82 @@ const el = {
   btnCopyLogs: document.getElementById("btn-copy-logs"),
   btnClearLogs: document.getElementById("btn-clear-logs"),
   apiStatusBadge: document.getElementById("api-status-badge"),
+
+  // Auth Elements
+  loginModal: document.getElementById("login-modal"),
+  loginForm: document.getElementById("login-form"),
+  loginUsername: document.getElementById("login-username"),
+  loginPassword: document.getElementById("login-password"),
+  loginErrorMsg: document.getElementById("login-error-msg"),
+  userInfoArea: document.getElementById("user-info-area"),
+  userBadge: document.getElementById("user-badge"),
+  btnLogout: document.getElementById("btn-logout"),
 };
+
+// ------------------------------------------------------------------------------
+// API Fetch Wrapper (com Injeção de Token e Interceptação 401)
+// ------------------------------------------------------------------------------
+async function apiFetch(url, options = {}) {
+  options.headers = options.headers || {};
+  if (state.authToken) {
+    options.headers["Authorization"] = `Bearer ${state.authToken}`;
+  }
+
+  const res = await fetch(url, options);
+  if (res.status === 401 && state.authEnabled) {
+    clearAuth();
+    showLoginModal("Sessão expirada ou credenciais inválidas. Por favor faça login.");
+    throw new Error("Não autenticado");
+  }
+  return res;
+}
+
+function showLoginModal(errorMsg = "") {
+  if (el.loginErrorMsg) {
+    if (errorMsg) {
+      el.loginErrorMsg.textContent = errorMsg;
+      el.loginErrorMsg.style.display = "block";
+    } else {
+      el.loginErrorMsg.style.display = "none";
+    }
+  }
+  if (el.loginModal) {
+    el.loginModal.classList.add("active");
+  }
+}
+
+function hideLoginModal() {
+  if (el.loginModal) {
+    el.loginModal.classList.remove("active");
+  }
+  if (el.loginErrorMsg) {
+    el.loginErrorMsg.style.display = "none";
+  }
+}
+
+function setAuth(token, username) {
+  state.authToken = token;
+  state.currentUser = username;
+  sessionStorage.setItem("gsi_token", token);
+  sessionStorage.setItem("gsi_user", username);
+
+  if (el.userInfoArea && el.userBadge) {
+    el.userBadge.textContent = `👤 ${username}`;
+    el.userInfoArea.style.display = "flex";
+  }
+  hideLoginModal();
+}
+
+function clearAuth() {
+  state.authToken = null;
+  state.currentUser = null;
+  sessionStorage.removeItem("gsi_token");
+  sessionStorage.removeItem("gsi_user");
+
+  if (el.userInfoArea) {
+    el.userInfoArea.style.display = "none";
+  }
+}
 
 // ------------------------------------------------------------------------------
 // Initialization
@@ -49,7 +127,7 @@ const el = {
 async function init() {
   setupEventListeners();
   await checkHealth();
-  await loadProfiles();
+  await checkAuthAndLoad();
 }
 
 function setupEventListeners() {
@@ -85,6 +163,82 @@ function setupEventListeners() {
       appendTerminalLog("[SISTEMA] Logs copiados para a área de transferência!", "log-success");
     });
   });
+
+  // Auth Listeners
+  if (el.loginForm) {
+    el.loginForm.addEventListener("submit", handleLoginSubmit);
+  }
+
+  if (el.btnLogout) {
+    el.btnLogout.addEventListener("click", () => {
+      clearAuth();
+      showLoginModal("Sessão encerrada.");
+    });
+  }
+}
+
+async function handleLoginSubmit(e) {
+  e.preventDefault();
+  const username = el.loginUsername.value.trim();
+  const password = el.loginPassword.value;
+
+  if (!username || !password) return;
+
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showLoginModal(data.detail || "Usuário ou senha incorretos");
+      return;
+    }
+
+    setAuth(data.token, data.username);
+    appendTerminalLog(`[AUTH] Conectado com sucesso como '${data.username}'.`, "log-success");
+    await loadProfiles();
+  } catch (err) {
+    showLoginModal(`Erro de conexão: ${err.message}`);
+  }
+}
+
+async function checkAuthAndLoad() {
+  try {
+    const res = await fetch("/api/auth/status");
+    if (res.ok) {
+      const data = await res.json();
+      state.authEnabled = data.auth_enabled;
+    }
+  } catch {
+    state.authEnabled = true;
+  }
+
+  if (!state.authEnabled) {
+    if (el.userInfoArea) el.userInfoArea.style.display = "none";
+    hideLoginModal();
+    await loadProfiles();
+    return;
+  }
+
+  if (state.authToken) {
+    try {
+      const res = await apiFetch("/api/auth/me");
+      if (res.ok) {
+        const user = await res.json();
+        setAuth(state.authToken, user.username);
+        await loadProfiles();
+        return;
+      }
+    } catch {
+      // Token inválido
+    }
+  }
+
+  // Se não autenticado, abre modal
+  showLoginModal();
 }
 
 // ------------------------------------------------------------------------------
@@ -105,7 +259,7 @@ async function checkHealth() {
 
 async function loadProfiles() {
   try {
-    const res = await fetch("/api/profiles");
+    const res = await apiFetch("/api/profiles");
     if (!res.ok) throw new Error("Falha ao buscar perfis");
     state.profiles = await res.json();
     renderCatalog();
@@ -152,9 +306,9 @@ async function openDashboard(profileId) {
 
   try {
     const [profileRes, statusRes, configRes] = await Promise.all([
-      fetch(`/api/profiles/${profileId}`),
-      fetch(`/api/servers/${profileId}/status`),
-      fetch(`/api/servers/${profileId}/config`)
+      apiFetch(`/api/profiles/${profileId}`),
+      apiFetch(`/api/servers/${profileId}/status`),
+      apiFetch(`/api/servers/${profileId}/config`)
     ]);
 
     if (!profileRes.ok) throw new Error("Erro ao carregar detalhes do perfil");
@@ -200,21 +354,29 @@ function updateStatusUI(status) {
   }
 
   // Portas
-  const portsText = status.ports ? status.ports.map(p => `${p.port}/${p.protocol}`).join(", ") : "-";
-  el.metricPorts.textContent = portsText;
+  if (status.ports && status.ports.length > 0) {
+    const mainPorts = status.ports
+      .filter(p => !p.optional)
+      .map(p => `${p.port}/${p.protocol}`)
+      .join(", ");
+    el.metricPorts.textContent = mainPorts || "-";
+    el.metricPorts.title = status.ports.map(p => `${p.port}/${p.protocol} (${p.description})`).join("\n");
+  } else {
+    el.metricPorts.textContent = "-";
+  }
 }
 
 function startStatusPolling(profileId) {
   stopStatusPolling();
   state.statusPollInterval = setInterval(async () => {
     try {
-      const res = await fetch(`/api/servers/${profileId}/status`);
+      const res = await apiFetch(`/api/servers/${profileId}/status`);
       if (res.ok) {
         const s = await res.json();
         updateStatusUI(s);
       }
     } catch {
-      // Ignorar falhas pontuais de polling
+      // Ignora falhas temporárias de polling
     }
   }, 4000);
 }
@@ -227,66 +389,85 @@ function stopStatusPolling() {
 }
 
 // ------------------------------------------------------------------------------
-// Dynamic Config Form Generation
+// Dynamic Form Generation
 // ------------------------------------------------------------------------------
 function renderFormFields(fields, configData) {
   el.formFieldsContainer.innerHTML = "";
-  const values = configData.values || configData.defaults || {};
 
-  fields.forEach(f => {
+  const values = configData.defaults || {};
+
+  fields.forEach(field => {
+    const val = (values[field.key] !== undefined) ? values[field.key] : field.default;
     const group = document.createElement("div");
     group.className = "form-group";
-    group.id = `group-${f.key}`;
 
-    const currentVal = values[f.key] !== undefined ? values[f.key] : f.default;
+    const label = document.createElement("label");
+    label.className = "form-label";
+    label.htmlFor = `field-${field.key}`;
+    label.textContent = field.label;
+    if (field.required) {
+      label.innerHTML += ' <span style="color: var(--danger)">*</span>';
+    }
 
-    if (f.type === "boolean") {
-      group.className = "form-group switch-wrapper";
-      group.innerHTML = `
-        <div>
-          <label class="form-label" for="field-${f.key}">${f.label}</label>
-          <div class="form-desc">${f.description || ""}</div>
-        </div>
-        <label class="switch">
-          <input type="checkbox" id="field-${f.key}" name="${f.key}" ${currentVal ? "checked" : ""}>
-          <span class="slider"></span>
-        </label>
-      `;
-    } else if (f.type === "select") {
-      const optionsHtml = (f.options || [])
-        .map(opt => `<option value="${opt.value}" ${String(opt.value) === String(currentVal) ? "selected" : ""}>${opt.label}</option>`)
-        .join("");
+    let inputEl;
 
-      group.innerHTML = `
-        <label class="form-label" for="field-${f.key}">
-          <span>${f.label}</span>
-          ${f.required ? '<span style="color: var(--danger)">*</span>' : ''}
-        </label>
-        <select class="form-select" id="field-${f.key}" name="${f.key}">
-          ${optionsHtml}
-        </select>
-        <div class="form-desc">${f.description || ""}</div>
-      `;
+    if (field.type === "boolean") {
+      group.className = "form-group form-check";
+      inputEl = document.createElement("input");
+      inputEl.type = "checkbox";
+      inputEl.className = "form-checkbox";
+      inputEl.id = `field-${field.key}`;
+      inputEl.name = field.key;
+      inputEl.checked = Boolean(val);
+
+      const checkLabel = document.createElement("label");
+      checkLabel.htmlFor = `field-${field.key}`;
+      checkLabel.textContent = field.label;
+      checkLabel.style.fontSize = "0.9rem";
+      checkLabel.style.cursor = "pointer";
+
+      group.appendChild(inputEl);
+      group.appendChild(checkLabel);
+
+    } else if (field.type === "select" && field.options) {
+      inputEl = document.createElement("select");
+      inputEl.className = "form-control";
+      inputEl.id = `field-${field.key}`;
+      inputEl.name = field.key;
+
+      field.options.forEach(opt => {
+        const option = document.createElement("option");
+        option.value = opt;
+        option.textContent = opt;
+        if (opt === String(val)) option.selected = true;
+        inputEl.appendChild(option);
+      });
+
+      group.appendChild(label);
+      group.appendChild(inputEl);
+
     } else {
-      const inputType = f.type === "password" ? "password" : (f.type === "integer" ? "number" : "text");
-      const minAttr = f.min !== null && f.min !== undefined ? `min="${f.min}"` : "";
-      const maxAttr = f.max !== null && f.max !== undefined ? `max="${f.max}"` : "";
+      inputEl = document.createElement("input");
+      inputEl.type = field.type === "integer" ? "number" : (field.type === "password" ? "password" : "text");
+      inputEl.className = "form-control";
+      inputEl.id = `field-${field.key}`;
+      inputEl.name = field.key;
+      inputEl.value = (val !== null && val !== undefined) ? val : "";
 
-      group.innerHTML = `
-        <label class="form-label" for="field-${f.key}">
-          <span>${f.label}</span>
-          ${f.required ? '<span style="color: var(--danger)">*</span>' : ''}
-        </label>
-        <input 
-          class="form-input" 
-          type="${inputType}" 
-          id="field-${f.key}" 
-          name="${f.key}" 
-          value="${currentVal !== null && currentVal !== undefined ? currentVal : ""}"
-          ${minAttr} ${maxAttr}
-        >
-        <div class="form-desc">${f.description || ""}</div>
-      `;
+      if (field.validation) {
+        if (field.validation.min !== undefined) inputEl.min = field.validation.min;
+        if (field.validation.max !== undefined) inputEl.max = field.validation.max;
+      }
+
+      group.appendChild(label);
+      group.appendChild(inputEl);
+    }
+
+    if (field.description) {
+      const hint = document.createElement("span");
+      hint.className = "form-hint";
+      hint.textContent = field.description;
+      group.appendChild(hint);
     }
 
     el.formFieldsContainer.appendChild(group);
@@ -294,9 +475,8 @@ function renderFormFields(fields, configData) {
 }
 
 function collectFormData() {
+  if (!state.currentProfile) return {};
   const data = {};
-  if (!state.currentProfile) return data;
-
   state.currentProfile.fields.forEach(f => {
     const input = document.getElementById(`field-${f.key}`);
     if (!input) return;
@@ -324,7 +504,7 @@ async function handleInstallServer() {
   el.btnInstall.disabled = true;
 
   try {
-    const res = await fetch("/api/jobs/install", {
+    const res = await apiFetch("/api/jobs/install", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -354,12 +534,12 @@ async function handleStartServer() {
   appendTerminalLog(`[AÇÃO] Iniciando servidor de ${state.currentProfile.name}...`, "log-info");
 
   try {
-    const res = await fetch(`/api/servers/${state.currentProfile.id}/start`, { method: "POST" });
+    const res = await apiFetch(`/api/servers/${state.currentProfile.id}/start`, { method: "POST" });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Falha ao iniciar servidor");
 
     appendTerminalLog(`[SUCESSO] ${data.message} (PID: ${data.pid})`, "log-success");
-    const statusRes = await fetch(`/api/servers/${state.currentProfile.id}/status`);
+    const statusRes = await apiFetch(`/api/servers/${state.currentProfile.id}/status`);
     updateStatusUI(await statusRes.json());
   } catch (err) {
     appendTerminalLog(`[ERRO] ${err.message}`, "log-error");
@@ -371,12 +551,12 @@ async function handleStopServer() {
   appendTerminalLog(`[AÇÃO] Parando servidor de ${state.currentProfile.name}...`, "log-warn");
 
   try {
-    const res = await fetch(`/api/servers/${state.currentProfile.id}/stop`, { method: "POST" });
+    const res = await apiFetch(`/api/servers/${state.currentProfile.id}/stop`, { method: "POST" });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Falha ao parar servidor");
 
     appendTerminalLog(`[OK] ${data.message}`, "log-warn");
-    const statusRes = await fetch(`/api/servers/${state.currentProfile.id}/status`);
+    const statusRes = await apiFetch(`/api/servers/${state.currentProfile.id}/status`);
     updateStatusUI(await statusRes.json());
   } catch (err) {
     appendTerminalLog(`[ERRO] ${err.message}`, "log-error");
@@ -388,12 +568,12 @@ async function handleRestartServer() {
   appendTerminalLog(`[AÇÃO] Reiniciando servidor de ${state.currentProfile.name}...`, "log-info");
 
   try {
-    const res = await fetch(`/api/servers/${state.currentProfile.id}/restart`, { method: "POST" });
+    const res = await apiFetch(`/api/servers/${state.currentProfile.id}/restart`, { method: "POST" });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Falha ao reiniciar servidor");
 
     appendTerminalLog(`[OK] ${data.message}`, "log-success");
-    const statusRes = await fetch(`/api/servers/${state.currentProfile.id}/status`);
+    const statusRes = await apiFetch(`/api/servers/${state.currentProfile.id}/status`);
     updateStatusUI(await statusRes.json());
   } catch (err) {
     appendTerminalLog(`[ERRO] ${err.message}`, "log-error");
@@ -405,7 +585,7 @@ async function handleSaveConfig() {
   const values = collectFormData();
 
   try {
-    const res = await fetch(`/api/servers/${state.currentProfile.id}/config`, {
+    const res = await apiFetch(`/api/servers/${state.currentProfile.id}/config`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(values)
@@ -426,7 +606,11 @@ async function handleSaveConfig() {
 function connectLogStream(jobId) {
   closeEventSource();
 
-  const es = new EventSource(`/api/jobs/${jobId}/stream`);
+  const streamUrl = state.authToken 
+    ? `/api/jobs/${jobId}/stream?token=${encodeURIComponent(state.authToken)}`
+    : `/api/jobs/${jobId}/stream`;
+
+  const es = new EventSource(streamUrl);
   state.eventSource = es;
 
   es.onmessage = (event) => {
@@ -443,14 +627,14 @@ function connectLogStream(jobId) {
     closeEventSource();
     el.btnInstall.disabled = false;
     if (state.currentProfile) {
-      fetch(`/api/servers/${state.currentProfile.id}/status`)
+      apiFetch(`/api/servers/${state.currentProfile.id}/status`)
         .then(r => r.json())
         .then(s => updateStatusUI(s));
     }
   });
 
   es.onerror = () => {
-    // Conexão encerrada pelo servidor após término
+    appendTerminalLog("[STREAM] Conexão com o console encerrada.", "log-dim");
     closeEventSource();
     el.btnInstall.disabled = false;
   };
@@ -463,34 +647,38 @@ function closeEventSource() {
   }
 }
 
+// ------------------------------------------------------------------------------
+// Terminal Log Utilities
+// ------------------------------------------------------------------------------
 function appendTerminalLog(text, customClass = "") {
   if (!text) return;
 
   const line = document.createElement("div");
-  line.className = `log-line ${customClass}`;
+  line.className = "log-line";
 
-  // Destaque visual automático baseado no conteúdo
-  if (!customClass) {
-    if (text.includes("[OK]") || text.includes("OK") || text.includes("Success")) {
-      line.classList.add("log-success");
-    } else if (text.includes("[ERRO]") || text.includes("ERROR") || text.includes("Falha")) {
-      line.classList.add("log-error");
-    } else if (text.includes("==>") || text.includes("[INFO]")) {
-      line.classList.add("log-info");
-    } else if (text.includes("[AVISO]") || text.includes("warn")) {
-      line.classList.add("log-warn");
-    }
+  // Detecção de cores automática se não especificado
+  if (customClass) {
+    line.classList.add(customClass);
+  } else if (text.includes("Success") || text.includes("OK") || text.includes("Fully Installed")) {
+    line.classList.add("log-success");
+  } else if (text.includes("Error") || text.includes("Failed") || text.includes("FAILED")) {
+    line.classList.add("log-error");
+  } else if (text.includes("Update state") || text.includes("downloading")) {
+    line.classList.add("log-info");
   }
 
-  const timeStr = new Date().toLocaleTimeString();
-  line.textContent = `[${timeStr}] ${text}`;
-
+  line.textContent = text;
   el.terminalBody.appendChild(line);
+
+  // Limite de buffer a 1000 linhas
+  while (el.terminalBody.childNodes.length > 1000) {
+    el.terminalBody.removeChild(el.terminalBody.firstChild);
+  }
 
   if (state.autoScroll) {
     el.terminalBody.scrollTop = el.terminalBody.scrollHeight;
   }
 }
 
-// Iniciar a aplicação
+// Start
 document.addEventListener("DOMContentLoaded", init);

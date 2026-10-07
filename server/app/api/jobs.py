@@ -1,10 +1,11 @@
 """Rotas da API para criação, consulta e streaming de tarefas assíncronas."""
 
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from server.app.core.security import api_limiter, get_current_user
 from server.app.jobs.models import Job, JobLogEntry
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -40,7 +41,18 @@ async def get_job_logs(job_id: str, request: Request) -> List[JobLogEntry]:
 
 
 @router.post("/install", response_model=Job, status_code=202)
-async def create_install_job(request: Request, body: InstallJobRequest = Body(...)) -> Job:
+async def create_install_job(
+    request: Request,
+    body: InstallJobRequest = Body(...),
+    current_user: str = Depends(get_current_user)
+) -> Job:
+    client_ip = request.client.host if request.client else "unknown"
+    if not api_limiter.is_allowed(f"job_install:{client_ip}", max_requests=10, window_seconds=60):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Muitas solicitações de instalação. Aguarde um momento."
+        )
+
     profile_manager = request.app.state.profile_manager
     job_manager = request.app.state.job_manager
 
@@ -64,7 +76,11 @@ async def create_install_job(request: Request, body: InstallJobRequest = Body(..
 
 
 @router.get("/{job_id}/stream")
-async def stream_job_logs(job_id: str, request: Request) -> StreamingResponse:
+async def stream_job_logs(
+    job_id: str,
+    request: Request,
+    current_user: str = Depends(get_current_user)
+) -> StreamingResponse:
     job_manager = request.app.state.job_manager
     job = job_manager.get_job(job_id)
     if not job:

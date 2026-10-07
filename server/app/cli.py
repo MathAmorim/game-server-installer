@@ -139,6 +139,33 @@ def cmd_install_server(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_passwd(args: argparse.Namespace) -> int:
+    from server.app.core.auth import AuthManager
+    import getpass
+
+    auth_mgr = AuthManager()
+    username = args.username or "admin"
+    password = args.password
+    if not password:
+        try:
+            password = getpass.getpass(f"Digite a nova senha para o usuário '{username}': ")
+            confirm = getpass.getpass("Confirme a nova senha: ")
+            if password != confirm:
+                print("Erro: As senhas não conferem.", file=sys.stderr)
+                return 1
+        except (KeyboardInterrupt, EOFError):
+            print("\nOperação cancelada.", file=sys.stderr)
+            return 1
+
+    if len(password.strip()) < 4:
+        print("Erro: A senha deve conter pelo menos 4 caracteres.", file=sys.stderr)
+        return 1
+
+    auth_mgr.set_password(username, password)
+    print(f"[OK] Senha para o usuário '{username}' atualizada com sucesso!")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Game Server Installer CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -158,6 +185,11 @@ def main() -> None:
     p_inst.add_argument("profile_id", help="Identificador do perfil (ex: 7dtd)")
     p_inst.add_argument("--install-dir", help="Diretório de instalação customizado", default=None)
 
+    # passwd
+    p_pwd = subparsers.add_parser("passwd", help="Altera ou redefine a senha de acesso ao painel web")
+    p_pwd.add_argument("password", nargs="?", help="Nova senha (se omitida, será solicitada de forma segura)")
+    p_pwd.add_argument("-u", "--username", default="admin", help="Nome do usuário (padrão: admin)")
+
     args = parser.parse_args()
 
     if args.command == "validate-profile":
@@ -166,6 +198,8 @@ def main() -> None:
         sys.exit(cmd_generate_config(args))
     elif args.command == "install-server":
         sys.exit(cmd_install_server(args))
+    elif args.command == "passwd":
+        sys.exit(cmd_passwd(args))
 
 
 if __name__ == "__main__":
