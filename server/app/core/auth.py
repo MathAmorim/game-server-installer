@@ -97,16 +97,32 @@ class AuthManager:
         self._force_disabled = env_auth_enabled in ("false", "0", "no")
 
         self._data: Dict = {}
+        self._last_mtime: float = 0.0
         self.load_or_init()
+
+    def reload_if_changed(self) -> None:
+        """Recarrega os dados do disco caso o arquivo tenha sido modificado externamente."""
+        if not self.auth_file.exists():
+            return
+        try:
+            mtime = self.auth_file.stat().st_mtime
+            if mtime > self._last_mtime:
+                with open(self.auth_file, "r", encoding="utf-8") as f:
+                    self._data = json.load(f)
+                self._last_mtime = mtime
+        except Exception:
+            pass
 
     @property
     def auth_enabled(self) -> bool:
         if self._force_disabled:
             return False
+        self.reload_if_changed()
         return self._data.get("auth_enabled", True)
 
     @property
     def secret_key(self) -> str:
+        self.reload_if_changed()
         return self._data.get("secret_key", "gsi-default-secret-key-change-me")
 
     def load_or_init(self) -> None:
@@ -115,6 +131,7 @@ class AuthManager:
             try:
                 with open(self.auth_file, "r", encoding="utf-8") as f:
                     self._data = json.load(f)
+                self._last_mtime = self.auth_file.stat().st_mtime
                 return
             except Exception:
                 pass
@@ -161,9 +178,15 @@ class AuthManager:
                 pass
 
         temp_file.replace(self.auth_file)
+        if self.auth_file.exists():
+            try:
+                self._last_mtime = self.auth_file.stat().st_mtime
+            except Exception:
+                pass
 
     def authenticate(self, username: str, password: str) -> Optional[str]:
         """Autentica usuário e retorna token de sessão se válido."""
+        self.reload_if_changed()
         if not self.auth_enabled:
             return create_token(username or "admin", self.secret_key)
 
@@ -179,6 +202,7 @@ class AuthManager:
 
     def verify_token(self, token: str) -> Optional[str]:
         """Verifica token de acesso."""
+        self.reload_if_changed()
         if not self.auth_enabled:
             return "admin"
         return verify_token(token, self.secret_key)
