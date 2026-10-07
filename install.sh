@@ -290,6 +290,9 @@ setup_python_environment() {
     mkdir -p "${APP_DIR}"
     cp -r "${REPO_DIR}/server" "${APP_DIR}/"
     cp -r "${REPO_DIR}/profiles" "${APP_DIR}/"
+    if [ -d "${REPO_DIR}/tests" ]; then
+        cp -r "${REPO_DIR}/tests" "${APP_DIR}/"
+    fi
     chmod -R a+rX "${APP_DIR}"
 
     if [ ! -d "${VENV_DIR}" ]; then
